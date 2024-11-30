@@ -434,8 +434,12 @@ export function getFlag(name) {
                 RegExp(`(^|[^a-zA-Z])${keyword}([^a-zA-Z]|$)`).test(name),
             )
         ) {
-            //console.log(`ISOFlag = ${flag}`)
-            return (Flag = flag);
+            const isCN2 =
+                flag == '🇨🇳' &&
+                RegExp(`(^|[^a-zA-Z])CN2([^a-zA-Z]|$)`).test(name);
+            if (!isCN2) {
+                return (Flag = flag);
+            }
         }
     }
 
