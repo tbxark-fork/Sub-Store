@@ -27,6 +27,42 @@ function surge_port_hopping(raw) {
     };
 }
 
+function URI_PROXY() {
+    // socks5+tls
+    // socks5
+    // http, https(可以这么写)
+    const name = 'URI PROXY Parser';
+    const test = (line) => {
+        return /^(socks5\+tls|socks5|http|https):\/\//.test(line);
+    };
+    const parse = (line) => {
+        // parse url
+        // eslint-disable-next-line no-unused-vars
+        let [__, type, tls, username, password, server, port, query, name] =
+            line.match(
+                /^(socks5|http|http)(\+tls|s)?:\/\/(?:(.*?):(.*?)@)?(.*?):(\d+?)(\?.*?)?(?:#(.*?))?$/,
+            );
+
+        const proxy = {
+            name:
+                name != null
+                    ? decodeURIComponent(name)
+                    : `${type} ${server}:${port}`,
+            type,
+            tls: tls ? true : false,
+            server,
+            port,
+            username:
+                username != null ? decodeURIComponent(username) : undefined,
+            password:
+                password != null ? decodeURIComponent(password) : undefined,
+        };
+
+        return proxy;
+    };
+    return { name, test, parse };
+}
+
 // Parse SS URI format (only supports new SIP002, legacy format is depreciated).
 // reference: https://github.com/shadowsocks/shadowsocks-org/wiki/SIP002-URI-Scheme
 function URI_SS() {
@@ -46,9 +82,15 @@ function URI_SS() {
         content = content.split('#')[0]; // strip proxy name
         // handle IPV4 and IPV6
         let serverAndPortArray = content.match(/@([^/]*)(\/|$)/);
-        let userInfoStr = Base64.decode(
-            decodeURIComponent(content.split('@')[0]),
-        );
+
+        let rawUserInfoStr = decodeURIComponent(content.split('@')[0]); // 其实应该分隔之后, 用户名和密码再 decodeURIComponent. 但是问题不大
+        let userInfoStr;
+        if (rawUserInfoStr?.startsWith('2022-blake3-')) {
+            userInfoStr = rawUserInfoStr;
+        } else {
+            userInfoStr = Base64.decode(rawUserInfoStr);
+        }
+
         let query = '';
         if (!serverAndPortArray) {
             if (content.includes('?')) {
@@ -73,15 +115,21 @@ function URI_SS() {
             userInfoStr = content.split('@')[0];
             serverAndPortArray = content.match(/@([^/]*)(\/|$)/);
         }
+
         const serverAndPort = serverAndPortArray[1];
         const portIdx = serverAndPort.lastIndexOf(':');
         proxy.server = serverAndPort.substring(0, portIdx);
         proxy.port = `${serverAndPort.substring(portIdx + 1)}`.match(
             /\d+/,
         )?.[0];
-        const userInfo = userInfoStr.match(/(^.*?):(.*$)/);
-        proxy.cipher = userInfo[1];
-        proxy.password = userInfo[2];
+        let userInfo = userInfoStr.match(/(^.*?):(.*$)/);
+        proxy.cipher = userInfo?.[1];
+        proxy.password = userInfo?.[2];
+        // if (!proxy.cipher || !proxy.password) {
+        //     userInfo = rawUserInfoStr.match(/(^.*?):(.*$)/);
+        //     proxy.cipher = userInfo?.[1];
+        //     proxy.password = userInfo?.[2];
+        // }
 
         // handle obfs
         const idx = content.indexOf('?plugin=');
@@ -1380,6 +1428,7 @@ function isIP(ip) {
 }
 
 export default [
+    URI_PROXY(),
     URI_SS(),
     URI_SSR(),
     URI_VMess(),
